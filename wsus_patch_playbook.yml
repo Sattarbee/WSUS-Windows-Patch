@@ -13,4 +13,16 @@
 
     - name: Show WSUS Servers (raw list)
       debug:
-        msg: "{{ wsus_servers.stdout_lines}}"
+        msg: "{{ wsus_servers.stdout_lines }}"
+
+- name: Step 2 - Report Servers in GUI-friendly format
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Save WSUS server hostnames
+      set_fact:
+        wsus_server_list: "{{ hostvars[groups['wsus_server'][0]].wsus_servers.stdout_lines | map('trim') | list }}"
+
+    - name: Show consolidated WSUS servers
+      debug:
+        msg: "WSUS Servers: {{ wsus_server_list }}"
