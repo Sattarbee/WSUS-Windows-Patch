@@ -13,5 +13,4 @@
 
     - name: Show WSUS Servers (raw list)
       debug:
-        msg: "{{ wsus_servers.stdout_lines }"
-
+        msg: "{{ wsus_servers.stdout_lines}}"
