@@ -41,4 +41,4 @@
     - name: Copy CSV report to local Windows machine
       ansible.windows.win_copy:
         src: /tmp/wsus_server_list.csv
-        dest: C:\Users\Public\Downloads\wsus_server_list.csv
+        dest: C:\Users\P-SVE7FZ\Downloads\wsus_server_list.csv
