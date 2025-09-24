@@ -1,0 +1,10 @@
+---
+- name: Step 1 - Connect to WSUS Server
+  hosts: wsus_server
+  gather_facts: no
+  tasks:
+    - name: Ping WSUS server
+      win_ping:
+
+    - name: Report WSUS Hostname
+      win_hostname:
