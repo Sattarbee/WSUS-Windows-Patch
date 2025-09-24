@@ -11,18 +11,36 @@
         $group.GetComputerTargets() | Select-Object -ExpandProperty FullDomainName
       register: wsus_servers
 
-    - name: Show WSUS Servers (raw list)
+    - name: Show WSUS Servers (raw list - one per line)
       debug:
-        msg: "{{ wsus_servers.stdout_lines }}"
+        msg: "{{ wsus_servers.stdout_lines | join('\n') }}"
 
 - name: Step 2 - Report Servers in GUI-friendly format
   hosts: localhost
   gather_facts: no
   tasks:
-    - name: Save WSUS server hostnames
+    - name: Save WSUS server hostnames as list
       set_fact:
         wsus_server_list: "{{ hostvars[groups['wsus_server'][0]].wsus_servers.stdout_lines | map('trim') | list }}"
 
-    - name: Show consolidated WSUS servers
+    - name: Show consolidated WSUS servers (each on a new line)
       debug:
-        msg: "WSUS Servers: {{ wsus_server_list }}"
+        msg: "{{ wsus_server_list | join('\n') }}"
+
+    - name: Save WSUS server list to CSV file on control node
+      copy:
+        dest: "/tmp/wsus_server_list.csv"
+        content: |
+          Hostname
+          {{ wsus_server_list | join('\n') }}
+      delegate_to: localhost
+
+- name: Step 3 - Download CSV to local machine
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Fetch CSV file to local machine
+      fetch:
+        src: /tmp/wsus_server_list.csv
+        dest: ./wsus_server_list.csv
+        flat: yes
