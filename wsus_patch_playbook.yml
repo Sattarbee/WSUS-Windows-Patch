@@ -1,27 +1,26 @@
 ---
-- name: Step 1 - Connect to Windows Clients
-  hosts: windows_clients
+- name: Step 1 - Get WSUS Clients
+  hosts: wsus_server
   gather_facts: no
   tasks:
-    - name: Trigger Windows Update Scan (WSUS)
-      win_shell: powershell.exe -Command "UsoClient.exe StartScan"
+    - name: Query WSUS for registered clients
+      win_shell: |
+        Import-Module UpdateServices
+        Get-WsusServer | Get-WsusComputer | Select-Object -ExpandProperty FullDomainName
+      register: wsus_clients
 
-    - name: Get Client Hostname
-      win_command: hostname
-      register: client_hostname
+    - name: Show WSUS Clients (raw list)
+      debug:
+        msg: "{{ wsus_clients.stdout_lines }}"
 
-    - name: Save hostname into hostvars
-      set_fact:
-        wsus_client_hostname: "{{ client_hostname.stdout | trim }}"
-
-- name: Step 2 - Collect and Show All Client Hostnames
+- name: Step 2 - Report Clients in GUI-friendly format
   hosts: localhost
   gather_facts: no
   tasks:
-    - name: Build list of client hostnames
+    - name: Save WSUS client hostnames
       set_fact:
-        all_client_hostnames: "{{ groups['windows_clients'] | map('extract', hostvars, 'wsus_client_hostname') | list }}"
+        wsus_client_list: "{{ hostvars[groups['wsus_server'][0]].wsus_clients.stdout_lines | map('trim') | list }}"
 
-    - name: Show all client hostnames (GUI-friendly)
+    - name: Show consolidated WSUS clients
       debug:
-        msg: "WSUS Clients: {{ all_client_hostnames }}"
+        msg: "WSUS Clients: {{ wsus_client_list }}"
