@@ -1,26 +1,28 @@
 ---
-- name: Step 1 - Get WSUS Clients
+- name: Step 1 - Get WSUS Clients from Servers group
   hosts: wsus_server
   gather_facts: no
   tasks:
-    - name: Query WSUS for registered clients
+    - name: Query WSUS Servers group for registered clients
       win_shell: |
         Import-Module UpdateServices
-        Get-WsusServer | Get-WsusComputer | Select-Object -ExpandProperty FullDomainName
-      register: wsus_clients
+        $wsus = Get-WsusServer
+        $group = $wsus.GetComputerTargetGroups() | Where-Object { $_.Name -eq "Servers" }
+        $group.GetComputerTargets() | Select-Object -ExpandProperty FullDomainName
+      register: wsus_servers
 
-    - name: Show WSUS Clients (raw list)
+    - name: Show WSUS Servers (raw list)
       debug:
-        msg: "{{ wsus_clients.stdout_lines }}"
+        msg: "{{ wsus_servers.stdout_lines }}"
 
-- name: Step 2 - Report Clients in GUI-friendly format
+- name: Step 2 - Report Servers in GUI-friendly format
   hosts: localhost
   gather_facts: no
   tasks:
-    - name: Save WSUS client hostnames
+    - name: Save WSUS server hostnames
       set_fact:
-        wsus_client_list: "{{ hostvars[groups['wsus_server'][0]].wsus_clients.stdout_lines | map('trim') | list }}"
+        wsus_server_list: "{{ hostvars[groups['wsus_server'][0]].wsus_servers.stdout_lines | map('trim') | list }}"
 
-    - name: Show consolidated WSUS clients
+    - name: Show consolidated WSUS servers
       debug:
-        msg: "WSUS Clients: {{ wsus_client_list }}"
+        msg: "WSUS Servers: {{ wsus_server_list }}"
