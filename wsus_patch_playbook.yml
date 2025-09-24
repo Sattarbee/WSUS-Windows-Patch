@@ -38,7 +38,7 @@
 - name: Copy report to Windows workstation
   hosts: my_windows_pc
   tasks:
-    - name: Copy CSV report to local Windows machine
+    - name: Copy TXT report to local Windows machine
       ansible.windows.win_copy:
         src: /tmp/wsus_server_list.txt
         dest: C:\Users\P-SVE7FZ\Downloads\wsus_server_list.txt
