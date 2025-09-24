@@ -8,3 +8,11 @@
 
     - name: Report WSUS Hostname
       win_hostname:
+
+- name: Step 2 - Connect to Windows Clients and Install Updates from WSUS
+  hosts: windows_clients
+  gather_facts: no
+  tasks:
+
+    - name: Trigger Windows Update Scan (WSUS)
+      win_shell: powershell.exe -Command "UsoClient.exe StartScan"
