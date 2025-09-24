@@ -35,12 +35,11 @@
           {{ wsus_server_list | join('\n') }}
       delegate_to: localhost
 
-- name: Step 3 - Download CSV to local machine
-  hosts: localhost
-  gather_facts: no
+- name: Copy report to Windows workstation
+  hosts: my_windows_pc
   tasks:
-    - name: Fetch CSV file to local machine
-      fetch:
+    - name: Copy CSV report to local Windows machine
+      ansible.windows.win_copy:
         src: /tmp/wsus_server_list.csv
-        dest: ./wsus_server_list.csv
-        flat: yes
+        dest: C:\Users\Public\Downloads\wsus_server_list.csv
+      delegate_to: localhost
