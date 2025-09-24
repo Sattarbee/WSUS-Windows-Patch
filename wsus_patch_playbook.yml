@@ -15,7 +15,7 @@
       debug:
         msg: "{{ wsus_servers.stdout_lines | join('\n') }}"
 
-- name: Step 2 - Report Servers in GUI-friendly format
+- name: Step 2 - Save list to text file on control node
   hosts: localhost
   gather_facts: no
   tasks:
@@ -27,7 +27,7 @@
       debug:
         msg: "{{ wsus_server_list | join('\n') }}"
 
-    - name: Save WSUS server list to test file on control node
+    - name: Save WSUS server list to text file
       copy:
         dest: "/tmp/wsus_server_list.txt"
         content: |
@@ -35,10 +35,11 @@
           {{ wsus_server_list | join('\n') }}
       delegate_to: localhost
 
-- name: Copy report to Windows workstation
+- name: Step 3 - Copy report to Windows workstation
   hosts: my_windows_pc
+  gather_facts: no
   tasks:
-    - name: Copy CSV report to local Windows machine
+    - name: Copy text report to Windows Downloads folder
       ansible.windows.win_copy:
         src: /tmp/wsus_server_list.txt
         dest: C:\Users\P-SVE7FZ\Downloads\wsus_server_list.txt
