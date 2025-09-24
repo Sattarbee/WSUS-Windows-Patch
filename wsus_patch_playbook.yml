@@ -23,6 +23,7 @@
       set_fact:
         wsus_server_list: "{{ hostvars[groups['wsus_server'][0]].wsus_servers.stdout_lines | map('trim') | list }}"
 
-    - name: Show consolidated WSUS servers
+    - name: Show consolidated WSUS servers (one per line)
       debug:
-        msg: "WSUS Servers: {{ wsus_server_list }}"
+        msg: "{{ wsus_server_list | join('\n') }}"
+
