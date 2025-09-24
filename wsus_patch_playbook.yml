@@ -9,7 +9,7 @@
     - name: Report WSUS Hostname
       win_hostname:
 
-- name: Step 2 - Connect to Windows Clients and Install Updates from WSUS
+- name: Step 2 - Connect to Windows Clients 
   hosts: windows_clients
   gather_facts: no
   tasks:
