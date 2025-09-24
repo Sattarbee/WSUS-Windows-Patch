@@ -27,10 +27,14 @@
       debug:
         msg: "{{ wsus_server_list | join('\n') }}"
 
-    - name: Save WSUS server list to text file using template
-      template:
-        src: wsus_list.j2
-        dest: /tmp/wsus_server_list.txt
+    - name: Save WSUS server list to text file
+      copy:
+        dest: "/tmp/wsus_server_list.txt"
+        content: |
+          Hostname
+{% for host in wsus_server_list %}
+{{ host }}
+{% endfor %}
       delegate_to: localhost
 
 - name: Step 3 - Copy report to Windows workstation
