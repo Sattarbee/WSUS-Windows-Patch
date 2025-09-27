@@ -1,9 +1,9 @@
 ---
-- name: Step 1 - Get WSUS Clients from Servers group
+- name: Step 1 - Get WSUS Clients from "Servers" group
   hosts: wsus_server
   gather_facts: no
   tasks:
-    - name: Query WSUS Servers group for registered clients
+    - name: Query WSUS server for registered clients in "Servers" group
       win_shell: |
         Import-Module UpdateServices
         $wsus = Get-WsusServer
@@ -11,34 +11,37 @@
         $group.GetComputerTargets() | Select-Object -ExpandProperty FullDomainName
       register: wsus_servers
 
-    - name: Show WSUS Servers (raw list - one per line)
+    - name: Show WSUS clients (each on a new line)
       debug:
         msg: "{{ wsus_servers.stdout_lines | join('\n') }}"
 
-- name: Step 2 - Report Servers in GUI-friendly format
+- name: Step 2 - Format and save WSUS clients to CSV
   hosts: localhost
   gather_facts: no
   tasks:
-    - name: Save WSUS server hostnames as list
+    - name: Set fact for cleaned WSUS server list
       set_fact:
         wsus_server_list: "{{ hostvars[groups['wsus_server'][0]].wsus_servers.stdout_lines | map('trim') | list }}"
 
-    - name: Show consolidated WSUS servers (each on a new line)
+    - name: Show formatted WSUS server list
       debug:
         msg: "{{ wsus_server_list | join('\n') }}"
 
-    - name: Save WSUS server list to CSV file on control node
+    - name: Save WSUS server list to CSV file
       copy:
         dest: "/tmp/wsus_server_list.csv"
         content: |
           Hostname
-          {{ wsus_server_list | join('\n') }}
+          {% for host in wsus_server_list %}
+          {{ host }}
+          {% endfor %}
       delegate_to: localhost
 
-- name: Copy report to Windows workstation
+- name: Step 3 - Copy CSV to Windows workstation
   hosts: my_windows_pc
+  gather_facts: no
   tasks:
-    - name: Copy CSV report to local Windows machine
+    - name: Copy CSV report to Downloads folder on Windows PC
       ansible.windows.win_copy:
         src: /tmp/wsus_server_list.csv
         dest: C:\Users\P-SVE7FZ\Downloads\wsus_server_list.csv
