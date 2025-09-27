@@ -27,6 +27,12 @@
       debug:
         msg: "{{ wsus_server_list | join('\n') }}"
 
+    - name: Add WSUS servers to dynamic group
+      add_host:
+        name: "{{ item }}"
+        groups: wsus_dynamic
+      loop: "{{ wsus_server_list }}"
+
     - name: Save WSUS server list to CSV file
       copy:
         dest: "/tmp/wsus_server_list.csv"
@@ -50,7 +56,7 @@
 # STEP 4: Scan each WSUS client for pending updates
 # ---------------------------------------------
 - name: Step 4 - Scan WSUS clients for pending updates
-  hosts: "{{ wsus_server_list }}"
+  hosts: wsus_dynamic
   gather_facts: no
   tasks:
     - name: Scan for pending updates (search only)
