@@ -45,3 +45,46 @@
       ansible.windows.win_copy:
         src: /tmp/wsus_server_list.csv
         dest: C:\Users\P-SVE7FZ\Downloads\wsus_server_list.csv
+
+# ---------------------------------------------
+# STEP 4: Scan each WSUS client for pending updates
+# ---------------------------------------------
+- name: Step 4 - Scan WSUS clients for pending updates
+  hosts: "{{ wsus_server_list }}"
+  gather_facts: no
+  tasks:
+    - name: Scan for pending updates (search only)
+      win_updates:
+        state: searched
+      register: update_scan_result
+
+    - name: Set fact with pending updates
+      set_fact:
+        pending_updates: "{{ update_scan_result.updates | map(attribute='title') | list }}"
+
+    - name: Add results to central fact for reporting
+      set_fact:
+        patch_report: "{{ patch_report | default({}) | combine({inventory_hostname: pending_updates}) }}"
+      delegate_to: localhost
+
+# ---------------------------------------------
+# STEP 5: Save Pending Updates Report to CSV
+# ---------------------------------------------
+- name: Step 5 - Generate consolidated CSV report of pending patches
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Ensure patch report directory exists
+      file:
+        path: /tmp/wsus_patch_report
+        state: directory
+        mode: '0755'
+
+    - name: Generate CSV from patch_report
+      copy:
+        dest: "/tmp/wsus_patch_report/wsus_pending_patches.csv"
+        content: |
+          Hostname,Pending Patches
+          {% for host, patches in patch_report.items() %}
+          {{ host }},{"{{ patches | join('; ') if patches | length > 0 else 'No pending updates' }}"}
+          {% endfor %}
