@@ -34,20 +34,23 @@
         state: searched
       register: update_scan_result
 
-    - name: Set pending updates fact
+    - name: Set pending updates fact per host
       set_fact:
         pending_updates: "{{ update_scan_result.updates | map(attribute='title') | list }}"
 
-    - name: Add patch info to central fact on localhost
-      set_fact:
-        patch_report: "{{ patch_report | default({}) | combine({inventory_hostname: pending_updates}) }}"
-      delegate_to: localhost
-      run_once: false
-
-- name: Step 4 - Generate simple CSV report on localhost
+- name: Step 4 - Aggregate patch_report and generate CSV on localhost
   hosts: localhost
   gather_facts: no
   tasks:
+    - name: Aggregate patch_report from all wsus_dynamic hosts
+      set_fact:
+        patch_report: >-
+          {{
+            dict(
+              groups['wsus_dynamic'] | map('extract', hostvars, ['pending_updates']) | zip(groups['wsus_dynamic']) | map('reverse') | list
+            )
+          }}
+
     - name: Ensure report directory exists
       file:
         path: /tmp/wsus_patch_report
