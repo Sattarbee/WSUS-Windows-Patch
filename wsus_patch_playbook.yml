@@ -1,5 +1,5 @@
 ---
-- name: Step 1 - Get WSUS Clients from "Servers" group
+- name: Step 1 - Get WSUS Clients from "Servers" group and scan for updates
   hosts: wsus_server
   gather_facts: no
   tasks:
@@ -11,60 +11,25 @@
         $group.GetComputerTargets() | Select-Object -ExpandProperty FullDomainName
       register: wsus_servers
 
-    - name: Show WSUS clients (each on a new line)
-      debug:
-        msg: "{{ wsus_servers.stdout_lines | join('\n') }}"
-
-- name: Step 2 - Format and save WSUS clients to CSV
-  hosts: localhost
-  gather_facts: no
-  tasks:
-    - name: Set fact for cleaned WSUS server list
+    - name: Set fact for clean list of WSUS clients
       set_fact:
-        wsus_server_list: "{{ hostvars[groups['wsus_server'][0]].wsus_servers.stdout_lines | map('trim') | list }}"
+        wsus_server_list: "{{ wsus_servers.stdout_lines | map('trim') | list | unique }}"
 
-    - name: Show formatted WSUS server list
-      debug:
-        msg: "{{ wsus_server_list | join('\n') }}"
-
-    - name: Add WSUS servers to dynamic group (remove duplicates)
+    - name: Add WSUS clients to dynamic group
       add_host:
         name: "{{ item }}"
         groups: wsus_dynamic
-      loop: "{{ wsus_server_list | unique }}"
-
-    - name: Save WSUS server list to CSV file
-      copy:
-        dest: "/tmp/wsus_server_list.csv"
-        content: |
-          Hostname
-          {% for host in wsus_server_list | unique %}
-          {{ host }}
-          {% endfor %}
-      delegate_to: localhost
-
-- name: Step 3 - Copy CSV to Windows workstation
-  hosts: my_windows_pc
-  gather_facts: no
-  tasks:
-    - name: Copy CSV report to Downloads folder on Windows PC
-      ansible.windows.win_copy:
-        src: /tmp/wsus_server_list.csv
-        dest: C:\Users\P-SVE7FZ\Downloads\wsus_server_list.csv
+      loop: "{{ wsus_server_list }}"
 
 # ---------------------------------------------
-# STEP 4: Scan each WSUS client for pending updates
+# STEP 2: Scan and collect pending updates
 # ---------------------------------------------
-- name: Step 4 - Scan WSUS clients for pending updates
+- name: Step 2 - Scan WSUS clients for pending updates
   hosts: wsus_dynamic
   gather_facts: no
   tasks:
-    - name: Show current host being scanned
-      debug:
-        msg: "Scanning {{ inventory_hostname }}"
-
-    - name: Scan for pending updates (search only)
-      ansible.windows.win_updates:
+    - name: Scan for pending updates
+      win_updates:
         state: searched
       register: update_scan_result
 
@@ -72,16 +37,16 @@
       set_fact:
         pending_updates: "{{ update_scan_result.updates | map(attribute='title') | list }}"
 
-    - name: Add results to central fact for reporting (on localhost)
+    - name: Add results to patch report on localhost
       set_fact:
-        patch_report: "{{ patch_report | default({}) | combine({inventory_hostname: pending_updates}) }}"
+        patch_report: "{{ hostvars.localhost.patch_report | default({}) | combine({inventory_hostname: pending_updates}) }}"
       delegate_to: localhost
       run_once: false
 
 # ---------------------------------------------
-# STEP 5: Save Pending Updates Report to CSV
+# STEP 3: Save Report and Transfer to Windows
 # ---------------------------------------------
-- name: Step 5 - Generate consolidated CSV report of pending patches
+- name: Step 3 - Save patch report to CSV and transfer to Windows
   hosts: localhost
   gather_facts: no
   tasks:
@@ -90,11 +55,6 @@
         path: /tmp/wsus_patch_report
         state: directory
         mode: '0755'
-
-    - name: Initialize patch_report variable if not defined
-      set_fact:
-        patch_report: {}
-      when: patch_report is not defined
 
     - name: Generate CSV from patch_report
       copy:
@@ -105,14 +65,11 @@
           {{ host }},{"{{ patches | join('; ') if patches | length > 0 else 'No pending updates' }}"}
           {% endfor %}
 
-# ---------------------------------------------
-# STEP 6: Copy final patch report to Windows workstation
-# ---------------------------------------------
-- name: Step 6 - Copy consolidated CSV report to Windows PC
+- name: Step 4 - Copy final CSV to Windows PC
   hosts: my_windows_pc
   gather_facts: no
   tasks:
-    - name: Copy consolidated patch report CSV to Windows PC
+    - name: Copy patch report to Downloads folder on Windows PC
       ansible.windows.win_copy:
         src: /tmp/wsus_patch_report/wsus_pending_patches.csv
         dest: C:\Users\P-SVE7FZ\Downloads\wsus_pending_patches.csv
