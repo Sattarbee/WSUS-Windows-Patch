@@ -1,5 +1,5 @@
 ---
-- name: Step 1 - Get WSUS Clients from "Servers" group
+- name: Step 1 - Get WSUS Clients from "Servers" group and scan for updates
   hosts: wsus_server
   gather_facts: no
   tasks:
@@ -11,13 +11,9 @@
         $group.GetComputerTargets() | Select-Object -ExpandProperty FullDomainName
       register: wsus_servers
 
-- name: Step 2 - Create dynamic group of WSUS clients
-  hosts: localhost
-  gather_facts: no
-  tasks:
-    - name: Extract and clean WSUS clients list
+    - name: Set fact for clean list of WSUS clients
       set_fact:
-        wsus_server_list: "{{ hostvars[groups['wsus_server'][0]].wsus_servers.stdout_lines | map('trim') | unique | list }}"
+        wsus_server_list: "{{ wsus_servers.stdout_lines | map('trim') | list | unique }}"
 
     - name: Add WSUS clients to dynamic group
       add_host:
@@ -25,7 +21,10 @@
         groups: wsus_dynamic
       loop: "{{ wsus_server_list }}"
 
-- name: Step 3 - Scan WSUS clients for pending updates
+# ---------------------------------------------
+# STEP 2: Scan and collect pending updates
+# ---------------------------------------------
+- name: Step 2 - Scan WSUS clients for pending updates
   hosts: wsus_dynamic
   gather_facts: no
   tasks:
@@ -34,25 +33,24 @@
         state: searched
       register: update_scan_result
 
-    - name: Set pending updates fact per host
+    - name: Set fact with pending updates
       set_fact:
         pending_updates: "{{ update_scan_result.updates | map(attribute='title') | list }}"
 
-- name: Step 4 - Aggregate patch_report and generate CSV on localhost
+    - name: Add results to patch report on localhost
+      set_fact:
+        patch_report: "{{ hostvars.localhost.patch_report | default({}) | combine({inventory_hostname: pending_updates}) }}"
+      delegate_to: localhost
+      run_once: false
+
+# ---------------------------------------------
+# STEP 3: Save Report and Transfer to Windows
+# ---------------------------------------------
+- name: Step 3 - Save patch report to CSV and transfer to Windows
   hosts: localhost
   gather_facts: no
   tasks:
-    - name: Aggregate patch_report from all wsus_dynamic hosts
-      set_fact:
-        patch_report: >-
-          {{
-            dict(
-              groups['wsus_dynamic'] | map('extract', hostvars) | map('combine', {'pending_updates': []}, recursive=False) |
-              map(attribute='pending_updates') | zip(groups['wsus_dynamic']) | map('reverse') | list
-            )
-          }}
-
-    - name: Ensure report directory exists
+    - name: Ensure patch report directory exists
       file:
         path: /tmp/wsus_patch_report
         state: directory
@@ -60,18 +58,18 @@
 
     - name: Generate CSV from patch_report
       copy:
-        dest: /tmp/wsus_patch_report/wsus_pending_patches.csv
+        dest: "/tmp/wsus_patch_report/wsus_pending_patches.csv"
         content: |
           Hostname,Pending Patches
           {% for host, patches in patch_report.items() %}
-          {{ host }},"{{ patches | join('; ') if patches else 'No pending updates' }}"
+          {{ host }},{"{{ patches | join('; ') if patches | length > 0 else 'No pending updates' }}"}
           {% endfor %}
 
-- name: Step 5 - Copy CSV report to Windows PC
+- name: Step 4 - Copy final CSV to Windows PC
   hosts: my_windows_pc
   gather_facts: no
   tasks:
-    - name: Copy CSV report to Downloads folder
+    - name: Copy patch report to Downloads folder on Windows PC
       ansible.windows.win_copy:
         src: /tmp/wsus_patch_report/wsus_pending_patches.csv
         dest: C:\Users\P-SVE7FZ\Downloads\wsus_pending_patches.csv
