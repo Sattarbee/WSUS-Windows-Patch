@@ -53,8 +53,7 @@
           {{
             dict(
               groups['wsus_dynamic'] | 
-              map('extract', hostvars, 'update_scan_result') | 
-              zip(groups['wsus_dynamic'])
+              zip(groups['wsus_dynamic'] | map('extract', hostvars, 'update_scan_result'))
             )
           }}
 
