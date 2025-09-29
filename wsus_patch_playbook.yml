@@ -47,7 +47,8 @@
         patch_report: >-
           {{
             dict(
-              groups['wsus_dynamic'] | map('extract', hostvars, ['pending_updates']) | zip(groups['wsus_dynamic']) | map('reverse') | list
+              groups['wsus_dynamic'] | map('extract', hostvars) | map('combine', {'pending_updates': []}, recursive=False) |
+              map(attribute='pending_updates') | zip(groups['wsus_dynamic']) | map('reverse') | list
             )
           }}
 
