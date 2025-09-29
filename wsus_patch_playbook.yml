@@ -27,18 +27,18 @@
       debug:
         msg: "{{ wsus_server_list | join('\n') }}"
 
-    - name: Add WSUS servers to dynamic group
+    - name: Add WSUS servers to dynamic group (remove duplicates)
       add_host:
         name: "{{ item }}"
         groups: wsus_dynamic
-      loop: "{{ wsus_server_list }}"
+      loop: "{{ wsus_server_list | unique }}"
 
     - name: Save WSUS server list to CSV file
       copy:
         dest: "/tmp/wsus_server_list.csv"
         content: |
           Hostname
-          {% for host in wsus_server_list %}
+          {% for host in wsus_server_list | unique %}
           {{ host }}
           {% endfor %}
       delegate_to: localhost
@@ -59,6 +59,10 @@
   hosts: wsus_dynamic
   gather_facts: no
   tasks:
+    - name: Show current host being scanned
+      debug:
+        msg: "Scanning {{ inventory_hostname }}"
+
     - name: Scan for pending updates (search only)
       win_updates:
         state: searched
