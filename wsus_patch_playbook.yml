@@ -64,7 +64,7 @@
         msg: "Scanning {{ inventory_hostname }}"
 
     - name: Scan for pending updates (search only)
-      win_updates:
+      ansible.windows.win_updates:
         state: searched
       register: update_scan_result
 
@@ -72,10 +72,11 @@
       set_fact:
         pending_updates: "{{ update_scan_result.updates | map(attribute='title') | list }}"
 
-    - name: Add results to central fact for reporting
+    - name: Add results to central fact for reporting (on localhost)
       set_fact:
         patch_report: "{{ patch_report | default({}) | combine({inventory_hostname: pending_updates}) }}"
       delegate_to: localhost
+      run_once: false
 
 # ---------------------------------------------
 # STEP 5: Save Pending Updates Report to CSV
@@ -90,6 +91,11 @@
         state: directory
         mode: '0755'
 
+    - name: Initialize patch_report variable if not defined
+      set_fact:
+        patch_report: {}
+      when: patch_report is not defined
+
     - name: Generate CSV from patch_report
       copy:
         dest: "/tmp/wsus_patch_report/wsus_pending_patches.csv"
@@ -98,3 +104,15 @@
           {% for host, patches in patch_report.items() %}
           {{ host }},{"{{ patches | join('; ') if patches | length > 0 else 'No pending updates' }}"}
           {% endfor %}
+
+# ---------------------------------------------
+# STEP 6: Copy final patch report to Windows workstation
+# ---------------------------------------------
+- name: Step 6 - Copy consolidated CSV report to Windows PC
+  hosts: my_windows_pc
+  gather_facts: no
+  tasks:
+    - name: Copy consolidated patch report CSV to Windows PC
+      ansible.windows.win_copy:
+        src: /tmp/wsus_patch_report/wsus_pending_patches.csv
+        dest: C:\Users\P-SVE7FZ\Downloads\wsus_pending_patches.csv
