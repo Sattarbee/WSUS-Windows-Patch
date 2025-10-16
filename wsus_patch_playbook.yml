@@ -52,7 +52,7 @@
         patch_report: >-
           {{
             dict(
-              groups['wsus_dynamic'] | 
+              groups['wsus_dynamic'] |
               zip(groups['wsus_dynamic'] | map('extract', hostvars, 'update_scan_result'))
             )
           }}
@@ -63,13 +63,16 @@
         state: directory
         mode: '0755'
 
-    - name: Generate consolidated CSV of pending patches
+    - name: Generate consolidated CSV of pending patches (with KBs and Titles)
       copy:
         dest: "/tmp/wsus_patch_report/wsus_pending_patches.csv"
         content: |
-          Hostname,Pending Patches
+          Hostname,Pending Count,KBs,Titles
           {% for host, result in patch_report.items() %}
-          {{ host }},{"{{ result.updates | map(attribute='title') | join('; ') if result.updates is defined and result.updates | length > 0 else 'No pending updates' }}"}
+          {{ host }},
+          {{ result.found_update_count | default(0) }},
+          "{{ result.updates | map(attribute='kb') | map('join', '') | join('; ') if result.updates is defined and result.updates | length > 0 else 'None' }}",
+          "{{ result.updates | map(attribute='title') | join('; ') if result.updates is defined and result.updates | length > 0 else 'No pending updates' }}"
           {% endfor %}
 
 - name: Step 5 - Copy consolidated CSV report to Windows PC
