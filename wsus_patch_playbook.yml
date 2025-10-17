@@ -82,6 +82,6 @@
   tasks:
     - name: Copy patch report CSV to Windows Downloads
       ansible.windows.win_copy:
-        src: /tmp/wsus_patch_report/wsus_pending_patches.csv
+        src: /var/tmp/wsus_patch_report/wsus_pending_patches.csv
         dest: C:\Users\P-SVE7FZ\Downloads\wsus_pending_patches.csv
 
