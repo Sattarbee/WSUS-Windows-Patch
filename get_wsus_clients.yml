@@ -1,0 +1,22 @@
+---
+- name: Get WSUS Clients from "Servers" group and generate inventory
+  hosts: wsus_server
+  gather_facts: no
+  tasks:
+    - name: Query WSUS server for registered clients in "Servers" group
+      win_shell: |
+        Import-Module UpdateServices
+        $wsus = Get-WsusServer
+        $group = $wsus.GetComputerTargetGroups() | Where-Object { $_.Name -eq "Servers" }
+        $group.GetComputerTargets() | Select-Object -ExpandProperty FullDomainName
+      register: wsus_servers
+
+    - name: Create inventory file for patching
+      delegate_to: localhost
+      copy:
+        dest: /opt/windows_patching/inventory
+        content: |
+          [wsus_dynamic]
+          {% for host in wsus_servers.stdout_lines %}
+          {{ host.strip() }}
+          {% endfor %}
