@@ -42,6 +42,7 @@
       ansible.windows.win_updates:
         state: searched
         category_names: []   # Include all update categories
+        use_task_scheduler: yes
       register: update_scan_result
 
 - name: Step 4 - Generate consolidated patch report on localhost
