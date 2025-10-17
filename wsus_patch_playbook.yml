@@ -83,7 +83,6 @@
         data:
           patch_report_file: "/var/tmp/wsus_patch_report/wsus_pending_patches.csv"
 
-# Optional Step 5 - Copy the report to a Windows PC (uncomment to use)
 - name: Step 5 - Copy consolidated CSV report to Windows PC
   hosts: my_windows_pc
   gather_facts: no
