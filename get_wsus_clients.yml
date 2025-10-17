@@ -64,19 +64,15 @@
   hosts: localhost
   gather_facts: no
   tasks:
-    - name: Gather update results from wsus_dynamic hosts (with fallback)
+    - name: Gather update results from wsus_dynamic hosts (safely)
       set_fact:
         patch_report: >-
           {{
             dict(
-              groups['wsus_dynamic'] |
-              map('extract', hostvars) |
-              map('combine', [{'update_scan_parsed': []}]) |
-              map(attribute='inventory_hostname') |
+              groups['wsus_dynamic'] | map('extract', hostvars) | map(attribute='inventory_hostname') | list
+              |
               zip(
-                groups['wsus_dynamic'] |
-                map('extract', hostvars) |
-                map(attribute='update_scan_parsed', default=[])
+                groups['wsus_dynamic'] | map('extract', hostvars) | map(attribute='update_scan_parsed', default=[]) | list
               )
             )
           }}
