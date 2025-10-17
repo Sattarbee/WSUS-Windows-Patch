@@ -72,3 +72,16 @@
           {% set updates = result.updates if result.updates is defined and result.updates is iterable else [] %}
           {{ host }},{{ result.found_update_count | default(0) }},"{% if updates and updates and updates[0] is mapping %}{{ updates | map(attribute='kb') | map('join', '') | join('; ') }}{% else %}None{% endif %}","{% if updates and updates and updates[0] is mapping %}{{ updates | map(attribute='title') | join('; ') }}{% else %}No pending updates{% endif %}"
           {% endfor %}
+    - name: Expose patch report file as downloadable artifact in Tower
+      set_stats:
+        data:
+          patch_report_file: "/var/tmp/wsus_patch_report/wsus_pending_patches.csv"
+- name: Step 5 - Copy consolidated CSV report to Windows PC
+  hosts: my_windows_pc
+  gather_facts: no
+  tasks:
+    - name: Copy patch report CSV to Windows Downloads
+      ansible.windows.win_copy:
+        src: /tmp/wsus_patch_report/wsus_pending_patches.csv
+        dest: C:\Users\P-SVE7FZ\Downloads\wsus_pending_patches.csv
+
