@@ -11,7 +11,6 @@
         $group.GetComputerTargets() | Select-Object -ExpandProperty FullDomainName
       register: wsus_servers
 
-# Dynamically add WSUS clients to an in-memory group and save their list
 - name: Step 2 - Save WSUS client list and create dynamic group
   hosts: localhost
   gather_facts: no
@@ -28,14 +27,13 @@
 
     - name: Save WSUS server list CSV
       copy:
-        dest: "/var/tmp/wsus_server_list.csv"
+        dest: "/tmp/wsus_server_list.csv"
         content: |
           Hostname
           {% for host in wsus_server_list %}
           {{ host }}
           {% endfor %}
 
-# Scan each client for available updates
 - name: Step 3 - Scan WSUS clients for pending updates
   hosts: wsus_dynamic
   gather_facts: no
@@ -45,7 +43,6 @@
         state: searched
       register: update_scan_result
 
-# Aggregate all scan results into a structured report and generate a downloadable file
 - name: Step 4 - Generate consolidated patch report on localhost
   hosts: localhost
   gather_facts: no
@@ -72,7 +69,7 @@
         content: |
           Hostname,Pending Count,KBs,Titles
           {% for host, result in patch_report.items() %}
-          {% set updates = result.updates if result.updates is defined and result.updates is iterable else [] %}
+          {% set updates = result.updates.values() | list if result.updates is defined and result.updates is mapping else (result.updates if result.updates is iterable else []) %}
           {% set filtered_updates = result.filtered_updates.values() | list if result.filtered_updates is defined else [] %}
           {% set combined_updates = updates + filtered_updates %}
           {{ host }},{{ result.found_update_count | default(0) }},"{% if combined_updates and combined_updates[0] is mapping %}{{ combined_updates | map(attribute='kb') | map('join', '') | join('; ') }}{% else %}None{% endif %}","{% if combined_updates and combined_updates[0] is mapping %}{{ combined_updates | map(attribute='title') | join('; ') }}{% else %}No pending updates{% endif %}"
@@ -83,12 +80,12 @@
         data:
           patch_report_file: "/var/tmp/wsus_patch_report/wsus_pending_patches.csv"
 
-# Optional Step 5 - Copy report to a Windows machine (only when needed)
-- name: Step 5 - Copy consolidated CSV report to Windows PC
-  hosts: my_windows_pc
-  gather_facts: no
-  tasks:
-    - name: Copy patch report CSV to Windows Downloads
-      ansible.windows.win_copy:
-        src: /var/tmp/wsus_patch_report/wsus_pending_patches.csv
-        dest: C:\Users\P-SVE7FZ\Downloads\wsus_pending_patches.csv
+# Optional - Uncomment if needed
+# - name: Step 5 - Copy consolidated CSV report to Windows PC
+#   hosts: my_windows_pc
+#   gather_facts: no
+#   tasks:
+#     - name: Copy patch report CSV to Windows Downloads
+#       ansible.windows.win_copy:
+#         src: /var/tmp/wsus_patch_report/wsus_pending_patches.csv
+#         dest: C:\Users\P-SVE7FZ\Downloads\wsus_pending_patches.csv
