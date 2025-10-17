@@ -80,12 +80,11 @@
         data:
           patch_report_file: "/var/tmp/wsus_patch_report/wsus_pending_patches.csv"
 
-# Optional - Uncomment if needed
-# - name: Step 5 - Copy consolidated CSV report to Windows PC
-#   hosts: my_windows_pc
-#   gather_facts: no
-#   tasks:
-#     - name: Copy patch report CSV to Windows Downloads
-#       ansible.windows.win_copy:
-#         src: /var/tmp/wsus_patch_report/wsus_pending_patches.csv
-#         dest: C:\Users\P-SVE7FZ\Downloads\wsus_pending_patches.csv
+- name: Step 5 - Copy consolidated CSV report to Windows PC
+  hosts: my_windows_pc
+  gather_facts: no
+  tasks:
+    - name: Copy patch report CSV to Windows Downloads
+      ansible.windows.win_copy:
+        src: /var/tmp/wsus_patch_report/wsus_pending_patches.csv
+        dest: C:\Users\P-SVE7FZ\Downloads\wsus_pending_patches.csv
