@@ -34,13 +34,14 @@
           {{ host }}
           {% endfor %}
 
-- name: Step 3 - Scan WSUS clients for pending updates
+- name: Step 3 - Scan WSUS clients for all pending updates
   hosts: wsus_dynamic
   gather_facts: no
   tasks:
-    - name: Scan for pending updates
+    - name: Scan for all pending updates (no category filtering)
       ansible.windows.win_updates:
         state: searched
+        category_names: []   # Include all update categories
       register: update_scan_result
 
 - name: Step 4 - Generate consolidated patch report on localhost
@@ -74,11 +75,6 @@
           {% set combined_updates = updates + filtered_updates %}
           {{ host }},{{ result.found_update_count | default(0) }},"{% if combined_updates and combined_updates[0] is mapping %}{{ combined_updates | map(attribute='kb') | map('join', '') | join('; ') }}{% else %}None{% endif %}","{% if combined_updates and combined_updates[0] is mapping %}{{ combined_updates | map(attribute='title') | join('; ') }}{% else %}No pending updates{% endif %}"
           {% endfor %}
-
-    - name: Expose patch report file as downloadable artifact in Tower
-      set_stats:
-        data:
-          patch_report_file: "/var/tmp/wsus_patch_report/wsus_pending_patches.csv"
 
 - name: Step 5 - Copy consolidated CSV report to Windows PC
   hosts: my_windows_pc
