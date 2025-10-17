@@ -34,9 +34,9 @@
           {{ host }}
           {% endfor %}
 
-- name: Step 3 - Scan WSUS clients for pending updates
+- name: Step 3 - Scan WSUS clients for pending updates and gather OS info
   hosts: wsus_dynamic
-  gather_facts: no
+  gather_facts: yes
   tasks:
     - name: Scan for pending updates
       ansible.windows.win_updates:
@@ -47,13 +47,16 @@
   hosts: localhost
   gather_facts: no
   tasks:
-    - name: Gather update_scan_result from all wsus_dynamic hosts
+    - name: Gather update_scan_result and OS info from all wsus_dynamic hosts
       set_fact:
         patch_report: >-
           {{
             dict(
               groups['wsus_dynamic'] |
-              zip(groups['wsus_dynamic'] | map('extract', hostvars, 'update_scan_result'))
+              zip(
+                groups['wsus_dynamic'] | map('extract', hostvars, 'update_scan_result'),
+                groups['wsus_dynamic'] | map('extract', hostvars, 'ansible_facts') | map(attribute='os_name')
+              )
             )
           }}
 
@@ -67,12 +70,12 @@
       copy:
         dest: "/var/tmp/wsus_patch_report/wsus_pending_patches.csv"
         content: |
-          Hostname,Pending Count,KBs,Titles
-          {% for host, result in patch_report.items() %}
+          Hostname,OS,KBs,Titles
+          {% for host, (result, os) in patch_report.items() %}
           {% set updates = result.updates.values() | list if result.updates is defined and result.updates is mapping else (result.updates if result.updates is iterable else []) %}
           {% set filtered_updates = result.filtered_updates.values() | list if result.filtered_updates is defined else [] %}
           {% set combined_updates = updates + filtered_updates %}
-          {{ host }},{{ result.found_update_count | default(0) }},"{% if combined_updates and combined_updates[0] is mapping %}{{ combined_updates | map(attribute='kb') | map('join', '') | join('; ') }}{% else %}None{% endif %}","{% if combined_updates and combined_updates[0] is mapping %}{{ combined_updates | map(attribute='title') | join('; ') }}{% else %}No pending updates{% endif %}"
+          {{ host }},{{ os }},"{% if combined_updates and combined_updates[0] is mapping %}{{ combined_updates | map(attribute='kb') | map('join', '') | join('; ') }}{% else %}None{% endif %}","{% if combined_updates and combined_updates[0] is mapping %}{{ combined_updates | map(attribute='title') | join('; ') }}{% else %}No pending updates{% endif %}"
           {% endfor %}
 
     - name: Expose patch report file as downloadable artifact in Tower
@@ -80,6 +83,7 @@
         data:
           patch_report_file: "/var/tmp/wsus_patch_report/wsus_pending_patches.csv"
 
+# Optional Step 5 - Copy the report to a Windows PC (uncomment to use)
 - name: Step 5 - Copy consolidated CSV report to Windows PC
   hosts: my_windows_pc
   gather_facts: no
