@@ -43,6 +43,10 @@
         state: searched
       register: update_scan_result
 
+    - name: Save update scan result as a host fact for Step 4
+      set_fact:
+        update_scan_result: "{{ update_scan_result }}"
+
 - name: Step 4 - Generate consolidated patch report on localhost
   hosts: localhost
   gather_facts: no
@@ -63,7 +67,7 @@
         state: directory
         mode: '0755'
 
-    - name: Generate consolidated CSV of pending patches (including filtered updates, with OS info)
+    - name: Generate consolidated CSV of pending patches (including filtered updates and OS)
       copy:
         dest: "/var/tmp/wsus_patch_report/wsus_pending_patches.csv"
         content: |
@@ -72,10 +76,8 @@
           {% set updates = result.updates.values() | list if result.updates is defined and result.updates is mapping else (result.updates if result.updates is iterable else []) %}
           {% set filtered_updates = result.filtered_updates.values() | list if result.filtered_updates is defined else [] %}
           {% set combined_updates = updates + filtered_updates %}
-          {{ host }},
-          {{ hostvars[host].ansible_os_name | default('Unknown') ~ " " ~ hostvars[host].ansible_os_version | default('') }},
-          "{% if combined_updates and combined_updates[0] is mapping %}{{ combined_updates | map(attribute='kb') | map('join', '') | join('; ') }}{% else %}None{% endif %}",
-          "{% if combined_updates and combined_updates[0] is mapping %}{{ combined_updates | map(attribute='title') | join('; ') }}{% else %}No pending updates{% endif %}"
+          {% set os_version = hostvars[host].ansible_facts.os_version | default('Unknown') %}
+          {{ host }},{{ os_version }},"{% if combined_updates and combined_updates[0] is mapping %}{{ combined_updates | map(attribute='kb') | map('join', '') | join('; ') }}{% else %}None{% endif %}","{% if combined_updates and combined_updates[0] is mapping %}{{ combined_updates | map(attribute='title') | join('; ') }}{% else %}No pending updates{% endif %}"
           {% endfor %}
 
     - name: Expose patch report file as downloadable artifact in Tower
@@ -87,19 +89,7 @@
   hosts: my_windows_pc
   gather_facts: no
   tasks:
-    - name: Confirm file exists on controller before copy
-      delegate_to: localhost
-      stat:
-        path: /var/tmp/wsus_patch_report/wsus_pending_patches.csv
-      register: report_file
-
-    - name: Fail if patch report is missing on controller
-      delegate_to: localhost
-      fail:
-        msg: "Patch report not found at /var/tmp/wsus_patch_report/wsus_pending_patches.csv"
-      when: not report_file.stat.exists
-
-    - name: Copy patch report CSV to Windows Downloads folder
+    - name: Copy patch report CSV to Windows Downloads
       ansible.windows.win_copy:
         src: /var/tmp/wsus_patch_report/wsus_pending_patches.csv
         dest: C:\Users\P-SVE7FZ\Downloads\wsus_pending_patches.csv
