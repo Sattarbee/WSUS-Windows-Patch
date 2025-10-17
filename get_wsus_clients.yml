@@ -1,0 +1,108 @@
+---
+- name: Step 1 - Get WSUS Clients from "Servers" group
+  hosts: wsus_server
+  gather_facts: no
+  tasks:
+    - name: Query WSUS server for registered clients in "Servers" group
+      win_shell: |
+        Import-Module UpdateServices
+        $wsus = Get-WsusServer
+        $group = $wsus.GetComputerTargetGroups() | Where-Object { $_.Name -eq "Servers" }
+        $group.GetComputerTargets() | Select-Object -ExpandProperty FullDomainName
+      register: wsus_servers
+
+- name: Step 2 - Save WSUS client list and create dynamic group
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Extract WSUS server list from first wsus_server host
+      set_fact:
+        wsus_server_list: "{{ hostvars[groups['wsus_server'][0]].wsus_servers.stdout_lines | map('trim') | unique | list }}"
+
+    - name: Add WSUS servers to dynamic group (wsus_dynamic)
+      add_host:
+        name: "{{ item }}"
+        groups: wsus_dynamic
+      loop: "{{ wsus_server_list }}"
+
+    - name: Save WSUS server list CSV
+      copy:
+        dest: "/tmp/wsus_server_list.csv"
+        content: |
+          Hostname
+          {% for host in wsus_server_list %}
+          {{ host }}
+          {% endfor %}
+
+- name: Step 3 - Query pending updates via WUA (WSUS-aware)
+  hosts: wsus_dynamic
+  gather_facts: no
+  tasks:
+    - name: Query Windows Update Agent (WUA) for pending updates
+      win_shell: |
+        $Session = New-Object -ComObject Microsoft.Update.Session
+        $Searcher = $Session.CreateUpdateSearcher()
+        $Results = $Searcher.Search("IsInstalled=0")
+        $Updates = @()
+        foreach ($Update in $Results.Updates) {
+            $Updates += [PSCustomObject]@{
+                Title = $Update.Title
+                KB    = ($Update.KBArticleIDs -join ", ")
+                Categories = ($Update.Categories | ForEach-Object { $_.Name }) -join ", "
+            }
+        }
+        $Updates | ConvertTo-Json -Compress
+      register: update_scan_result
+
+    - name: Save update scan result per host
+      set_fact:
+        update_scan_parsed: "{{ update_scan_result.stdout | from_json }}"
+
+- name: Step 4 - Generate consolidated patch report on localhost
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Gather parsed update results from wsus_dynamic hosts
+      set_fact:
+        patch_report: >-
+          {{
+            dict(
+              groups['wsus_dynamic'] |
+              zip(groups['wsus_dynamic'] | map('extract', hostvars, 'update_scan_parsed'))
+            )
+          }}
+
+    - name: Create patch report directory
+      file:
+        path: /var/tmp/wsus_patch_report
+        state: directory
+        mode: '0755'
+
+    - name: Generate consolidated CSV of pending patches
+      copy:
+        dest: "/var/tmp/wsus_patch_report/wsus_pending_patches.csv"
+        content: |
+          Hostname,KBs,Titles,Categories
+          {% for host, updates in patch_report.items() %}
+          {% if updates is iterable %}
+          {% for update in updates %}
+          {{ host }},{{ update.KB }},{{ update.Title | regex_replace(',', ' ') }},{{ update.Categories }}
+          {% endfor %}
+          {% else %}
+          {{ host }},None,No pending updates,None
+          {% endif %}
+          {% endfor %}
+
+    - name: Expose patch report as Tower artifact (optional)
+      set_stats:
+        data:
+          patch_report_file: "/var/tmp/wsus_patch_report/wsus_pending_patches.csv"
+
+- name: Step 5 - Copy consolidated report to Windows PC
+  hosts: my_windows_pc
+  gather_facts: no
+  tasks:
+    - name: Copy patch report CSV to Windows Downloads
+      ansible.windows.win_copy:
+        src: /var/tmp/wsus_patch_report/wsus_pending_patches.csv
+        dest: C:\Users\P-SVE7FZ\Downloads\wsus_pending_patches.csv
