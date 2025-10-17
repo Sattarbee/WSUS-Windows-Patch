@@ -51,14 +51,17 @@
                 Categories = ($Update.Categories | ForEach-Object { $_.Name }) -join ", "
             }
         }
-        $Updates | ConvertTo-Json -Compress
+        $Updates | ForEach-Object { $_ | ConvertTo-Json -Compress }
       register: update_scan_result
       failed_when: update_scan_result.rc != 0
 
-    - name: Parse update scan output
+    - name: Parse update scan output line by line
       set_fact:
-        update_scan_parsed: "{{ update_scan_result.stdout | from_json }}"
-      when: update_scan_result.stdout | length > 0
+        update_scan_parsed: >-
+          {{
+            update_scan_result.stdout_lines | map('from_json') | list
+          }}
+      when: update_scan_result.stdout_lines is defined
 
 - name: Step 4 - Generate consolidated patch report on localhost
   hosts: localhost
@@ -89,7 +92,7 @@
         content: |
           Hostname,KBs,Titles,Categories
           {% for host, updates in patch_report.items() %}
-          {% if updates is iterable and updates | length > 0 %}
+          {% if updates is iterable and updates | length > 0 and updates[0] is mapping %}
           {% for update in updates %}
           {{ host }},{{ update.KB }},{{ update.Title | regex_replace(',', ' ') }},{{ update.Categories }}
           {% endfor %}
