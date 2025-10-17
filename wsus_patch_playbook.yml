@@ -34,9 +34,9 @@
           {{ host }}
           {% endfor %}
 
-- name: Step 3 - Scan WSUS clients for pending updates and gather OS info
+- name: Step 3 - Scan WSUS clients for pending updates
   hosts: wsus_dynamic
-  gather_facts: yes
+  gather_facts: yes  # Required to get OS version
   tasks:
     - name: Scan for pending updates
       ansible.windows.win_updates:
@@ -47,16 +47,13 @@
   hosts: localhost
   gather_facts: no
   tasks:
-    - name: Gather update_scan_result and OS info from all wsus_dynamic hosts
+    - name: Gather update_scan_result from all wsus_dynamic hosts
       set_fact:
         patch_report: >-
           {{
             dict(
               groups['wsus_dynamic'] |
-              zip(
-                groups['wsus_dynamic'] | map('extract', hostvars, 'update_scan_result'),
-                groups['wsus_dynamic'] | map('extract', hostvars, 'ansible_facts') | map(attribute='os_name')
-              )
+              zip(groups['wsus_dynamic'] | map('extract', hostvars, 'update_scan_result'))
             )
           }}
 
@@ -66,16 +63,17 @@
         state: directory
         mode: '0755'
 
-    - name: Generate consolidated CSV of pending patches (including filtered updates)
+    - name: Generate consolidated CSV of pending patches (with OS info)
       copy:
         dest: "/var/tmp/wsus_patch_report/wsus_pending_patches.csv"
         content: |
           Hostname,OS,KBs,Titles
-          {% for host, (result, os) in patch_report.items() %}
+          {% for host, result in patch_report.items() %}
           {% set updates = result.updates.values() | list if result.updates is defined and result.updates is mapping else (result.updates if result.updates is iterable else []) %}
           {% set filtered_updates = result.filtered_updates.values() | list if result.filtered_updates is defined else [] %}
           {% set combined_updates = updates + filtered_updates %}
-          {{ host }},{{ os }},"{% if combined_updates and combined_updates[0] is mapping %}{{ combined_updates | map(attribute='kb') | map('join', '') | join('; ') }}{% else %}None{% endif %}","{% if combined_updates and combined_updates[0] is mapping %}{{ combined_updates | map(attribute='title') | join('; ') }}{% else %}No pending updates{% endif %}"
+          {% set os_version = hostvars[host]['ansible_facts']['os_name'] | default('Unknown') %}
+          {{ host }},{{ os_version }},"{% if combined_updates and combined_updates[0] is mapping %}{{ combined_updates | map(attribute='kb') | map('join', '') | join('; ') }}{% else %}None{% endif %}","{% if combined_updates and combined_updates[0] is mapping %}{{ combined_updates | map(attribute='title') | join('; ') }}{% else %}No pending updates{% endif %}"
           {% endfor %}
 
     - name: Expose patch report file as downloadable artifact in Tower
