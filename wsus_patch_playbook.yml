@@ -11,6 +11,7 @@
         $group.GetComputerTargets() | Select-Object -ExpandProperty FullDomainName
       register: wsus_servers
 
+# Dynamically add WSUS clients to an in-memory group and save their list
 - name: Step 2 - Save WSUS client list and create dynamic group
   hosts: localhost
   gather_facts: no
@@ -27,13 +28,14 @@
 
     - name: Save WSUS server list CSV
       copy:
-        dest: "/tmp/wsus_server_list.csv"
+        dest: "/var/tmp/wsus_server_list.csv"
         content: |
           Hostname
           {% for host in wsus_server_list %}
           {{ host }}
           {% endfor %}
 
+# Scan each client for available updates
 - name: Step 3 - Scan WSUS clients for pending updates
   hosts: wsus_dynamic
   gather_facts: no
@@ -43,6 +45,7 @@
         state: searched
       register: update_scan_result
 
+# Aggregate all scan results into a structured report and generate a downloadable file
 - name: Step 4 - Generate consolidated patch report on localhost
   hosts: localhost
   gather_facts: no
@@ -63,17 +66,6 @@
         state: directory
         mode: '0755'
 
-    # --- OPTIONAL: Uncomment if you want an .xlsx-style filename ---
-    # - name: Generate consolidated xlsx of pending patches (with KBs and Titles)
-    #   copy:
-    #     dest: "/var/tmp/wsus_patch_report/wsus_pending_patches.xlsx"
-    #     content: |
-    #       Hostname,Pending Count,KBs,Titles
-    #       {% for host, result in patch_report.items() %}
-    #       {% set updates = result.updates if result.updates is defined and result.updates is iterable else [] %}
-    #       {{ host }},{{ result.found_update_count | default(0) }},"{% if updates and updates[0] is mapping %}{{ updates | map(attribute='kb') | map('join', '') | join('; ') }}{% else %}None{% endif %}","{% if updates and updates[0] is mapping %}{{ updates | map(attribute='title') | join('; ') }}{% else %}No pending updates{% endif %}"
-    #       {% endfor %}
-
     - name: Generate consolidated CSV of pending patches (including filtered updates)
       copy:
         dest: "/var/tmp/wsus_patch_report/wsus_pending_patches.csv"
@@ -81,24 +73,17 @@
           Hostname,Pending Count,KBs,Titles
           {% for host, result in patch_report.items() %}
           {% set updates = result.updates if result.updates is defined and result.updates is iterable else [] %}
-          {% set filtered_updates = result.filtered_updates.values() if result.filtered_updates is defined else [] %}
+          {% set filtered_updates = result.filtered_updates.values() | list if result.filtered_updates is defined else [] %}
           {% set combined_updates = updates + filtered_updates %}
           {{ host }},{{ result.found_update_count | default(0) }},"{% if combined_updates and combined_updates[0] is mapping %}{{ combined_updates | map(attribute='kb') | map('join', '') | join('; ') }}{% else %}None{% endif %}","{% if combined_updates and combined_updates[0] is mapping %}{{ combined_updates | map(attribute='title') | join('; ') }}{% else %}No pending updates{% endif %}"
           {% endfor %}
 
-    # --- OPTIONAL: If you want to copy file from container to Tower host (only if host is accessible) ---
-    # - name: Fetch patch report from container to Tower host
-    #   fetch:
-    #     src: /var/tmp/wsus_patch_report/wsus_pending_patches.csv
-    #     dest: /opt/windows_patching/wsus_pending_patches.csv
-    #     flat: yes
-
-    # --- Artifact visible in Tower UI ---
     - name: Expose patch report file as downloadable artifact in Tower
       set_stats:
         data:
           patch_report_file: "/var/tmp/wsus_patch_report/wsus_pending_patches.csv"
 
+# Optional Step 5 - Copy report to a Windows machine (only when needed)
 - name: Step 5 - Copy consolidated CSV report to Windows PC
   hosts: my_windows_pc
   gather_facts: no
