@@ -34,11 +34,11 @@
           {{ host }}
           {% endfor %}
 
-- name: Step 3 - Query pending updates via WUA (WSUS-aware)
+- name: Step 3 - Query pending updates using Windows Update Agent
   hosts: wsus_dynamic
   gather_facts: no
   tasks:
-    - name: Query Windows Update Agent (WUA) for pending updates
+    - name: Query Windows Update Agent (WUA) for pending updates (WSUS-respecting)
       win_shell: |
         $Session = New-Object -ComObject Microsoft.Update.Session
         $Searcher = $Session.CreateUpdateSearcher()
@@ -53,22 +53,31 @@
         }
         $Updates | ConvertTo-Json -Compress
       register: update_scan_result
+      failed_when: update_scan_result.rc != 0
 
-    - name: Save update scan result per host
+    - name: Parse update scan output
       set_fact:
         update_scan_parsed: "{{ update_scan_result.stdout | from_json }}"
+      when: update_scan_result.stdout | length > 0
 
 - name: Step 4 - Generate consolidated patch report on localhost
   hosts: localhost
   gather_facts: no
   tasks:
-    - name: Gather parsed update results from wsus_dynamic hosts
+    - name: Gather update results from wsus_dynamic hosts (with fallback)
       set_fact:
         patch_report: >-
           {{
             dict(
               groups['wsus_dynamic'] |
-              zip(groups['wsus_dynamic'] | map('extract', hostvars, 'update_scan_parsed'))
+              map('extract', hostvars) |
+              map('combine', [{'update_scan_parsed': []}]) |
+              map(attribute='inventory_hostname') |
+              zip(
+                groups['wsus_dynamic'] |
+                map('extract', hostvars) |
+                map(attribute='update_scan_parsed', default=[])
+              )
             )
           }}
 
@@ -84,7 +93,7 @@
         content: |
           Hostname,KBs,Titles,Categories
           {% for host, updates in patch_report.items() %}
-          {% if updates is iterable %}
+          {% if updates is iterable and updates | length > 0 %}
           {% for update in updates %}
           {{ host }},{{ update.KB }},{{ update.Title | regex_replace(',', ' ') }},{{ update.Categories }}
           {% endfor %}
